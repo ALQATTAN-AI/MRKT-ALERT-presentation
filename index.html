@@ -46,6 +46,7 @@ main#deck{position:relative;z-index:5}
 .r{opacity:0;transform:translateY(22px);filter:blur(6px);
   transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1),filter .8s;transition-delay:0s}
 .slide.inview .r{opacity:1;transform:none;filter:none;transition-delay:calc(var(--i,0) * 90ms + 180ms)}
+.slide.chart-hold.inview .r{transition-delay:calc(var(--i,0) * 130ms + 1.7s)}
 
 h1,h2{font-family:var(--display);font-weight:600;margin:0;letter-spacing:-.025em;text-wrap:balance}
 h1{font-size:clamp(2.05rem,4.3vw,4.3rem);line-height:1.03}
@@ -403,7 +404,7 @@ nav.ctl svg{width:18px;height:18px}
 </section>
 
 <!-- 7 PIVOT 3D -->
-<section class="slide" data-station="pivot" data-name="Fibonacci pivots">
+<section class="slide chart-hold" data-station="pivot" data-name="Fibonacci pivots">
   <div class="copy">
     <h2 class="r">Fibonacci pivots, in the group before the desk opens.</h2>
     <p class="lead r">Every morning we publish today's Fibonacci levels from yesterday's high, low and close. One pivot, three resistance, three support. When price tags a level, the group hears that too.</p>
@@ -422,7 +423,7 @@ nav.ctl svg{width:18px;height:18px}
 </section>
 
 <!-- 8 PIVOT LIVE -->
-<section class="slide" data-station="pivot2" data-name="Fibonacci pivots">
+<section class="slide chart-hold" data-station="pivot2" data-name="Fibonacci pivots">
   <div class="copy">
     <h2 class="r">The morning post, already written.</h2>
     <p class="lead r">Silver goes out with the seven Fibonacci levels fixed. No calculator, no call. English and Arabic, in the group before the desk opens.</p>
@@ -731,7 +732,9 @@ slides.forEach(s=>seen.observe(s));
 const typedOnce=new IntersectionObserver(entries=>{
   entries.forEach(en=>{
     if(!en.isIntersecting) return;
-    typeBubble(en.target);
+    const hold=en.target.closest('.chart-hold');
+    const go=()=>typeBubble(en.target);
+    if(hold && !reduce) setTimeout(go, 2100); else go();
     typedOnce.unobserve(en.target);
   });
 },{threshold:0.4});
@@ -969,14 +972,17 @@ function initStage(){
     const dt=Math.min(clock.getDelta(),.05), t=clock.elapsedTime;
     if(!reduce){ surge*=Math.exp(-dt*.38); spinKick*=Math.exp(-dt*.55); }
     const globeLap=portrait && station.center!==CH;
+    const chartLap=portrait && station.center===CH;
     if(globeLap){
       const step=Math.max(0, GLOBE_RING.indexOf(stationKey));
-      const aim=-step*(Math.PI/2);
-      orbitAng+=angDiff(orbitAng, aim)*(reduce?1:1-Math.exp(-dt*1.1));
-      const ox=Math.cos(orbitAng)*8.4, oy=-11.5+Math.sin(orbitAng)*7.5;
-      fovBase=42; tLook.set(ox, oy, 0); tPos.set(ox, oy, 56);
+      const beat=step%3;
+      const pose=beat===0?{x:6.2,y:-14.2,z:50,fov:40}
+        :beat===1?{x:-2.8,y:-3.2,z:33,fov:32}
+        :{x:6.5,y:-6.5,z:74,fov:46};
+      orbitAng+=angDiff(orbitAng, -beat*2.1)*(reduce?1:1-Math.exp(-dt*1.1));
+      fovBase=pose.fov; tLook.set(pose.x, pose.y, 0); tPos.set(pose.x, pose.y, pose.z);
     }
-    const k=reduce?1:1-Math.exp(-dt*(globeLap?2.4:.28+surge*.35));
+    const k=reduce?1:1-Math.exp(-dt*(globeLap?1.15:chartLap?1.6:.28+surge*.35));
     camPos.lerp(tPos,k); camLook.lerp(tLook,k);
     const arc=reduce?0:Math.sin(Math.min(1,surge)*Math.PI);
     camera.position.copy(camPos);
