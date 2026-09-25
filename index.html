@@ -910,7 +910,8 @@ function initStage(){
   let station=ST.cover, stationKey='cover';
   let camPos=new THREE.Vector3(1.5,30,60), camLook=new THREE.Vector3(0,0,0);
   let pivotT=-1, chartT=-1, focusKey=null, userFocus=null, surge=0, spinKick=0;
-  let portrait=false, fovBase=45;
+  let portrait=false, fovBase=45, orbitAng=0;
+  const GLOBE_RING=['cover','far','far2','fix','coverage','sessions','custom','honest','how','trust','contact'];
   const tPos=new THREE.Vector3(), tLook=new THREE.Vector3();
   const up=new THREE.Vector3(0,1,0), spinQ=new THREE.Quaternion(), orbitOff=new THREE.Vector3();
   function resolve(){
@@ -921,9 +922,7 @@ function initStage(){
     if(portrait && c===CH){
       tLook.copy(c); tPos.set(c.x, c.y+2.4, c.z+78); fovBase=50;
     } else if(portrait){
-      const side=(['cover','far2','coverage','custom','how','contact'].includes(stationKey))?1:-1;
-      const shift=side*3.15;
-      tLook.set(shift,-.05,0); tPos.set(shift, 1.2, 48); fovBase=46;
+      fovBase=46;
     } else if(phone){
       tLook.lerp(c,.5); tPos.sub(c).multiplyScalar(.92).add(c); fovBase=48;
     } else fovBase=45;
@@ -946,8 +945,13 @@ function initStage(){
   window.__stage.setStation((document.querySelector(".slide.inview")||slides[0]).dataset.station);
   if(reduce){ camPos.copy(tPos); camLook.copy(tLook); }
 
+  function frameOffset(){
+    const w=innerWidth,h=innerHeight;
+    if(portrait && station.center===CH) camera.setViewOffset(w,h,0,Math.round(h*.16),w,h);
+    else camera.clearViewOffset();
+  }
   function size(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; resolve();
-    if(portrait) camera.setViewOffset(w,h,0,Math.round(h*(station.center===CH?.1:.2)),w,h); else camera.clearViewOffset();
+    frameOffset();
     camera.fov=fovBase; camera.updateProjectionMatrix();
     if(composer){ composer.setSize(w,h); bloom.setSize(w,h); } fitLabels(); }
   addEventListener('resize',size); size();
@@ -964,11 +968,19 @@ function initStage(){
   function loop(){
     const dt=Math.min(clock.getDelta(),.05), t=clock.elapsedTime;
     if(!reduce){ surge*=Math.exp(-dt*.38); spinKick*=Math.exp(-dt*.55); }
-    const k=reduce?1:1-Math.exp(-dt*(.28+surge*.35));
+    const globeLap=portrait && station.center!==CH;
+    if(globeLap){
+      const step=Math.max(0, GLOBE_RING.indexOf(stationKey));
+      const aim=-step*(Math.PI/2);
+      orbitAng+=angDiff(orbitAng, aim)*(reduce?1:1-Math.exp(-dt*1.1));
+      const ox=Math.cos(orbitAng)*8.4, oy=-11.5+Math.sin(orbitAng)*7.5;
+      fovBase=42; tLook.set(ox, oy, 0); tPos.set(ox, oy, 56);
+    }
+    const k=reduce?1:1-Math.exp(-dt*(globeLap?2.4:.28+surge*.35));
     camPos.lerp(tPos,k); camLook.lerp(tLook,k);
     const arc=reduce?0:Math.sin(Math.min(1,surge)*Math.PI);
     camera.position.copy(camPos);
-    if(!reduce){
+    if(!reduce && !globeLap){
       orbitOff.copy(camera.position).sub(camLook);
       const dist=Math.max(orbitOff.length(),.001);
       spinQ.setFromAxisAngle(up, arc*(portrait?.14:.26));
@@ -976,20 +988,22 @@ function initStage(){
       orbitOff.y+=Math.sin(arc*Math.PI)*dist*(portrait?.04:.08);
       camera.position.copy(camLook).add(orbitOff);
       camera.position.x+=mx*(portrait?.35:1.1); camera.position.y+=-my*(portrait?.2:.7);
-      camera.fov=fovBase+arc*(portrait?3.5:5); camera.updateProjectionMatrix();
+    } else if(!reduce){
+      camera.position.x+=mx*.2; camera.position.y+=-my*.12;
     }
+    camera.fov=fovBase+(reduce?0:arc*(globeLap?1.2:portrait?3.5:5)); frameOffset(); camera.updateProjectionMatrix();
     camera.lookAt(camLook);
-    if(!reduce) camera.rotateZ(Math.sin(surge*Math.PI)*(portrait?.07:.1));
+    if(!reduce && !globeLap) camera.rotateZ(Math.sin(surge*Math.PI)*(portrait?.07:.1));
 
     // globe focus
     let fk=userFocus || station.focus;
     if(fk==='session'){ fk = [...openNow][0] || 'london'; }
     if(fk){ const c = fk==='kuwait'? KUWAIT : CITIES[fk]; const ty=-c.lon*Math.PI/180; const tx=c.lat*Math.PI/180*.55;
       globe.rotation.y+=angDiff(globe.rotation.y,ty)*(reduce?1:1-Math.exp(-dt*.28)); globe.rotation.x+=(tx-globe.rotation.x)*(reduce?1:1-Math.exp(-dt*.28));
-      if(!reduce) globe.rotation.y+=spinKick*dt*.35;
+      if(!reduce) globe.rotation.y+=dt*((portrait?.42:.0)+spinKick*.35);
     }
-    else if(!reduce){ globe.rotation.y+=dt*(.018+spinKick*.2); globe.rotation.x*=.995; }
-    globeTilt.rotation.z=0.18+(reduce?0:Math.sin(surge*Math.PI)*.16);
+    else if(!reduce){ globe.rotation.y+=dt*((portrait?.42:.018)+spinKick*.2); globe.rotation.x*=.995; }
+    globeTilt.rotation.z=0.18+(portrait?Math.sin(orbitAng)*.35:0)+(reduce?0:Math.sin(surge*Math.PI)*.16);
     globeTilt.rotation.x=(reduce?0:Math.sin(surge*Math.PI)*.05);
     const gMul=innerWidth<900?1.7:1;
     Object.entries(markers).forEach(([key,m])=>{
