@@ -1,0 +1,10 @@
+{
+  "name": "mrkt-alert",
+  "private": true,
+  "dependencies": {
+    "serve": "14.2.6"
+  },
+  "scripts": {
+    "dev": "serve . -l tcp://0.0.0.0:47291"
+  }
+}
