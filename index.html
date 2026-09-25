@@ -880,7 +880,7 @@ function initStage(){
     const eg=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(w,0,0)]);
     const edge=new THREE.Line(eg,add(new THREE.LineBasicMaterial({color:col,opacity:isP?1:.85})));
     const grp=new THREE.Group(); grp.position.set(xToday,yv(PV[k]),0); grp.add(sheet,edge); grp.scale.x=.001; chart.add(grp);
-    const lb=label(isP?'P  Pivot':k,{h:isP?.5:.44,color:isP?'#ffb3ba':(isR?'#ff7a86':'#e9dfe1')}); lb.position.set(xEnd+.35,yv(PV[k]),0); lb.material.opacity=0; chart.add(lb);
+    const lb=label(isP?'P  Pivot':k,{h:isP?.5:.44,color:isP?'#ffb3ba':(isR?'#ff7a86':'#e9dfe1')}); lb.position.set(xEnd+.35,yv(PV[k]),0); lb.material.opacity=0; if(isP){ lb.userData.pivot=1; lb.center.x=1; } chart.add(lb);
     sheets.push({grp,lb,i});
   });
   const chartHalo=new THREE.Sprite(new THREE.SpriteMaterial({map:GLOW,color:0xff2a3d,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,opacity:.22}));
@@ -923,18 +923,18 @@ function initStage(){
     const phone=innerWidth<900 && !portrait;
     const c=s.center;
     if(portrait && c===CH){
-      tLook.copy(c); tPos.set(c.x, c.y+2.4, c.z+78); fovBase=50;
+      tLook.copy(c); tPos.set(c.x, c.y+2.4, c.z+72); fovBase=50;
     } else if(portrait){
-      fovBase=46;
+      tLook.set(0,0,0); tPos.set(0,0,32); fovBase=46;
     } else if(phone){
       tLook.lerp(c,.5); tPos.sub(c).multiplyScalar(.92).add(c); fovBase=48;
     } else fovBase=45;
   }
   function fitLabels(){
-    const gMul=innerWidth<900?1.7:1, cMul=innerWidth<900?2.15:1;
+    const gMul=innerWidth<900?1.7:1, cMul=portrait?2.6:(innerWidth<900?2.15:1);
     Object.values(markers).forEach(m=>{ if(m.lb.userData.base) m.lb.scale.copy(m.lb.userData.base).multiplyScalar(gMul); });
     if(kwLabel&&kwLabel.userData.base) kwLabel.scale.copy(kwLabel.userData.base).multiplyScalar(gMul);
-    chart.traverse(o=>{ if(o.isSprite&&o.userData.base) o.scale.copy(o.userData.base).multiplyScalar(cMul); });
+    chart.traverse(o=>{ if(o.isSprite&&o.userData.base) o.scale.copy(o.userData.base).multiplyScalar(cMul*(portrait&&o.userData.pivot?1.18:1)); });
   }
   window.__stage={
     setStation(k){
@@ -950,7 +950,7 @@ function initStage(){
 
   function frameOffset(){
     const w=innerWidth,h=innerHeight;
-    if(portrait && station.center===CH) camera.setViewOffset(w,h,0,Math.round(h*.16),w,h);
+    if(portrait) camera.setViewOffset(w,h,0,Math.round(h*(station.center===CH?.24:.15)),w,h);
     else camera.clearViewOffset();
   }
   function size(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; resolve();
@@ -973,16 +973,9 @@ function initStage(){
     if(!reduce){ surge*=Math.exp(-dt*.38); spinKick*=Math.exp(-dt*.55); }
     const globeLap=portrait && station.center!==CH;
     const chartLap=portrait && station.center===CH;
-    if(globeLap){
-      const step=Math.max(0, GLOBE_RING.indexOf(stationKey));
-      const beat=step%3;
-      const pose=beat===0?{x:6.2,y:-14.2,z:50,fov:40}
-        :beat===1?{x:-2.8,y:-3.2,z:33,fov:32}
-        :{x:6.5,y:-6.5,z:74,fov:46};
-      orbitAng+=angDiff(orbitAng, -beat*2.1)*(reduce?1:1-Math.exp(-dt*1.1));
-      fovBase=pose.fov; tLook.set(pose.x, pose.y, 0); tPos.set(pose.x, pose.y, pose.z);
-    }
-    const k=reduce?1:1-Math.exp(-dt*(globeLap?1.15:chartLap?1.6:.28+surge*.35));
+    const step=globeLap?Math.max(0, GLOBE_RING.indexOf(stationKey)):0;
+    if(globeLap) orbitAng+=angDiff(orbitAng, step*.62)*(reduce?1:1-Math.exp(-dt*.9));
+    const k=reduce?1:1-Math.exp(-dt*((globeLap||chartLap)?1.6:.28+surge*.35));
     camPos.lerp(tPos,k); camLook.lerp(tLook,k);
     const arc=reduce?0:Math.sin(Math.min(1,surge)*Math.PI);
     camera.position.copy(camPos);
@@ -994,10 +987,8 @@ function initStage(){
       orbitOff.y+=Math.sin(arc*Math.PI)*dist*(portrait?.04:.08);
       camera.position.copy(camLook).add(orbitOff);
       camera.position.x+=mx*(portrait?.35:1.1); camera.position.y+=-my*(portrait?.2:.7);
-    } else if(!reduce){
-      camera.position.x+=mx*.2; camera.position.y+=-my*.12;
     }
-    camera.fov=fovBase+(reduce?0:arc*(globeLap?1.2:portrait?3.5:5)); frameOffset(); camera.updateProjectionMatrix();
+    camera.fov=fovBase+(reduce||globeLap?0:arc*(portrait?3.5:5)); frameOffset(); camera.updateProjectionMatrix();
     camera.lookAt(camLook);
     if(!reduce && !globeLap) camera.rotateZ(Math.sin(surge*Math.PI)*(portrait?.07:.1));
 
@@ -1008,9 +999,12 @@ function initStage(){
       globe.rotation.y+=angDiff(globe.rotation.y,ty)*(reduce?1:1-Math.exp(-dt*.28)); globe.rotation.x+=(tx-globe.rotation.x)*(reduce?1:1-Math.exp(-dt*.28));
       if(!reduce) globe.rotation.y+=dt*((portrait?.42:.0)+spinKick*.35);
     }
-    else if(!reduce){ globe.rotation.y+=dt*((portrait?.42:.018)+spinKick*.2); globe.rotation.x*=.995; }
-    globeTilt.rotation.z=0.18+(portrait?Math.sin(orbitAng)*.35:0)+(reduce?0:Math.sin(surge*Math.PI)*.16);
-    globeTilt.rotation.x=(reduce?0:Math.sin(surge*Math.PI)*.05);
+    else {
+      if(globeLap) globe.rotation.y+=angDiff(globe.rotation.y, step*.8)*(reduce?1:1-Math.exp(-dt*.28));
+      if(!reduce){ globe.rotation.y+=dt*((portrait?.42:.018)+spinKick*.2); globe.rotation.x*=.995; }
+    }
+    globeTilt.rotation.z=0.18+(portrait?Math.sin(orbitAng)*.22:0)+(reduce?0:Math.sin(surge*Math.PI)*.16);
+    globeTilt.rotation.x=(portrait?Math.cos(orbitAng)*.1:0)+(reduce?0:Math.sin(surge*Math.PI)*.05);
     const gMul=innerWidth<900?1.7:1;
     Object.entries(markers).forEach(([key,m])=>{
       const on=openNow.has(key); const sel=(userFocus||station.focus)===key || (station.focus==='session'&&on);
@@ -1030,11 +1024,9 @@ function initStage(){
       kwLabel.scale.copy(kwLabel.userData.base).multiplyScalar(gMul*(sel?1.22:1));
       kwLabel.material.opacity += ((show?1:0)-kwLabel.material.opacity)*.2;
     }
-    if(!reduce){
-      const whip=Math.sin(Math.min(1,surge)*Math.PI);
-      chart.rotation.y=-0.22+whip*(station.pivot?.2:.05);
-      chart.rotation.x=whip*(station.pivot?.06:0);
-    }
+    const whip=reduce?0:Math.sin(Math.min(1,surge)*Math.PI);
+    chart.rotation.y=(portrait?-.5:-0.22)+whip*(station.pivot?.2:.05);
+    if(!reduce) chart.rotation.x=whip*(station.pivot?.06:0);
     arcs.forEach(a=>{ const u=reduce?.5:(t*.22+a.off)%1; a.dot.position.copy(a.curve.getPoint(u)); a.dot.material.opacity=Math.sin(u*Math.PI); });
 
     // chart build
