@@ -223,17 +223,18 @@ nav.ctl svg{width:18px;height:18px}
 
 @media (max-width:900px){
   body{overflow-x:hidden}
-  .slide{grid-template-columns:minmax(0,1fr);align-content:center;align-items:start;overflow:visible;
-    padding:calc(env(safe-area-inset-top,0px) + 88px) 18px 72px;
-    background:linear-gradient(180deg,rgba(5,2,5,.15),rgba(5,2,5,.72) 22%,rgba(5,2,5,.88))}
-  .slide.cover{padding-top:calc(env(safe-area-inset-top,0px) + 78px);align-content:center;
-    background:linear-gradient(180deg,rgba(5,2,5,.18),rgba(5,2,5,.72) 70%,rgba(5,2,5,.94))}
-  .copy{max-width:none}
+  .grain{background:radial-gradient(78% 46% at 50% 16%,transparent 8%,rgba(5,2,5,.28) 70%,rgba(5,2,5,.62) 100%)}
+  .slide{grid-template-columns:minmax(0,1fr);align-content:end;align-items:start;overflow:visible;
+    padding:48vh 18px 72px;
+    background:linear-gradient(180deg,transparent 0,transparent 32vh,rgba(5,2,5,.28) 44vh,rgba(5,2,5,.9) 60vh,rgba(5,2,5,.95))}
+  .slide.cover{padding-top:40vh;align-content:start;
+    background:linear-gradient(180deg,transparent 0,transparent 28vh,rgba(5,2,5,.2) 42vh,rgba(5,2,5,.88) 64%,rgba(5,2,5,.95))}
+  .copy{max-width:none;text-shadow:0 2px 22px rgba(5,2,5,.9)}
   h1{font-size:clamp(1.9rem,8.2vw,2.7rem)}
   h2{font-size:clamp(1.45rem,6.4vw,2.15rem)}
   .lead{margin-top:.85rem}
   .cover .vis{min-height:0;order:-1;width:100%}
-  .robot{position:relative;right:auto;bottom:auto;margin:0 auto .2rem;width:min(70%,280px)}
+  .robot{position:relative;right:auto;bottom:auto;margin:-4vh auto .15rem;width:min(40%,156px)}
   .presenter{margin-top:1.3rem}
   .hint{margin-top:1.15rem}
   .costs,.mods,.sessions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:1rem;overflow:visible}
@@ -776,7 +777,7 @@ function initStage(){
     c.width=w; c.height=fs*1.35; g.font=weight+' '+fs+'px '+family+', sans-serif'; g.fillStyle=color; g.textBaseline='middle'; g.fillText(text,12,c.height/2);
     const t=new THREE.CanvasTexture(c); t.minFilter=THREE.LinearFilter;
     const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,fog:false}));
-    s.scale.set(h*c.width/c.height,h,1); s.center.set(0,.5); return s; }
+    s.scale.set(h*c.width/c.height,h,1); s.center.set(.5,0); s.userData.base=s.scale.clone(); return s; }
 
 
   /* ---- starfield corridor ---- */
@@ -817,12 +818,12 @@ function initStage(){
     const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:GLOW,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,opacity:.0}));
     glow.scale.set(1.6,1.6,1);
     grp.add(core,ring,glow); globe.add(grp);
-    const lb=label(c.name,{h:.36}); lb.position.copy(ll(c.lat,c.lon,R*1.07)); lb.position.y+=.18; globe.add(lb);
+    const lb=label(c.name,{h:.48}); lb.position.copy(ll(c.lat,c.lon,R*1.28)); lb.position.y+=.42; lb.material.depthTest=false; lb.renderOrder=6; globe.add(lb);
     markers[k]={grp,ring,glow,lb,core};
   });
   const kw=ll(KUWAIT.lat,KUWAIT.lon);
   { const s=new THREE.Sprite(new THREE.SpriteMaterial({map:GLOW,color:0xffffff,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); s.scale.set(.9,.9,1); s.position.copy(kw); globe.add(s);
-    var kwLabel=label('Kuwait',{h:.3,color:'#ffb3ba'}); kwLabel.position.copy(ll(KUWAIT.lat,KUWAIT.lon,R*1.07)); kwLabel.position.y-=.25; globe.add(kwLabel); }
+    var kwLabel=label('Kuwait',{h:.42,color:'#ffb3ba'}); kwLabel.position.copy(ll(KUWAIT.lat,KUWAIT.lon,R*1.28)); kwLabel.position.y+=.08; kwLabel.material.depthTest=false; kwLabel.renderOrder=6; globe.add(kwLabel); }
   const arcs=[];
   Object.values(CITIES).forEach((c,i)=>{
     const b=ll(c.lat,c.lon); const mid=kw.clone().add(b).multiplyScalar(.5); const d=kw.distanceTo(b);
@@ -908,23 +909,36 @@ function initStage(){
     trust:   {pos:[0,-3,19], look:[0,-6.5,0], center:G, focus:'newyork'},
     contact: {pos:[1.5,1.2,15.5], look:[-4.6,.2,0], center:G, focus:'kuwait'}
   };
-  let station=ST.cover; let camPos=new THREE.Vector3(1.5,30,60), camLook=new THREE.Vector3(0,0,0);
-  let pivotT=-1, chartT=-1, focusKey=null, userFocus=null, spin=0;
+  let station=ST.cover, stationKey='cover';
+  let camPos=new THREE.Vector3(1.5,30,60), camLook=new THREE.Vector3(0,0,0);
+  let pivotT=-1, chartT=-1, focusKey=null, userFocus=null, surge=0, spinKick=0;
+  let portrait=false, fovBase=45;
   const tPos=new THREE.Vector3(), tLook=new THREE.Vector3();
+  const up=new THREE.Vector3(0,1,0), spinQ=new THREE.Quaternion(), orbitOff=new THREE.Vector3();
   function resolve(){
     const s=station; tPos.set(...s.pos); tLook.set(...s.look);
-    const portrait=innerWidth<900 && innerHeight>=innerWidth;
-    const phone=innerWidth<900;
-    if(portrait){
-      const c=s.center; tLook.lerp(c,.4); tPos.sub(c).multiplyScalar(1.05).add(c);
-      tPos.y += s.center===CH ? 7 : 3.6;
-      tLook.y += s.center===CH ? 3.2 : 1.4;
+    portrait=innerWidth<900 && innerHeight>=innerWidth;
+    const phone=innerWidth<900 && !portrait;
+    const c=s.center;
+    if(portrait && c===CH){
+      tLook.copy(c); tPos.set(c.x, c.y+3.6, c.z+70); fovBase=56;
+    } else if(portrait){
+      tLook.set(0,-.15,0); tPos.set(0, 2.2, 40); fovBase=52;
     } else if(phone){
-      const c=s.center; tLook.lerp(c,.7); tPos.sub(c).multiplyScalar(1.22).add(c);
-    }
+      tLook.lerp(c,.5); tPos.sub(c).multiplyScalar(.92).add(c); fovBase=48;
+    } else fovBase=45;
+  }
+  function fitLabels(){
+    const gMul=innerWidth<900?2.05:1, cMul=innerWidth<900?2.15:1;
+    Object.values(markers).forEach(m=>{ if(m.lb.userData.base) m.lb.scale.copy(m.lb.userData.base).multiplyScalar(gMul); });
+    if(kwLabel&&kwLabel.userData.base) kwLabel.scale.copy(kwLabel.userData.base).multiplyScalar(gMul);
+    chart.traverse(o=>{ if(o.isSprite&&o.userData.base) o.scale.copy(o.userData.base).multiplyScalar(cMul); });
   }
   window.__stage={
-    setStation(k){ station=ST[k]||ST.cover; userFocus=null; resolve();
+    setStation(k){
+      const nextKey=ST[k]?k:'cover';
+      if(nextKey!==stationKey && !reduce){ surge=1; spinKick=5.4; }
+      stationKey=nextKey; station=ST[nextKey]; userFocus=null; resolve();
       if(station.pivot && pivotT<0) pivotT=0; if(!station.pivot) pivotT=-1; if(station.pivot&&chartT<0) chartT=0;
       if(reduce){ camPos.copy(tPos); camLook.copy(tLook); } },
     focusCity(k){ userFocus=k; }
@@ -932,36 +946,75 @@ function initStage(){
   window.__stage.setStation((document.querySelector(".slide.inview")||slides[0]).dataset.station);
   if(reduce){ camPos.copy(tPos); camLook.copy(tLook); }
 
-  function size(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
-    if(composer){ composer.setSize(w,h); bloom.setSize(w,h); } resolve(); }
+  function size(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false); camera.aspect=w/h; resolve();
+    if(portrait) camera.setViewOffset(w,h,0,Math.round(h*(station.center===CH?.12:.26)),w,h); else camera.clearViewOffset();
+    camera.fov=fovBase; camera.updateProjectionMatrix();
+    if(composer){ composer.setSize(w,h); bloom.setSize(w,h); } fitLabels(); }
   addEventListener('resize',size); size();
 
   const clock=new THREE.Clock(); const ease=t=>1-Math.pow(1-Math.min(1,Math.max(0,t)),3);
+  const _wp=new THREE.Vector3(), _gp=new THREE.Vector3(), _nn=new THREE.Vector3(), _cd=new THREE.Vector3();
+  function facing(sprite){
+    sprite.getWorldPosition(_wp); globe.getWorldPosition(_gp);
+    _nn.copy(_wp).sub(_gp); if(_nn.lengthSq()<1e-6) return true; _nn.normalize();
+    _cd.copy(camera.position).sub(_wp).normalize();
+    return _nn.dot(_cd)>0.12;
+  }
   function angDiff(a,b){ let d=(b-a)%(Math.PI*2); if(d>Math.PI) d-=Math.PI*2; if(d<-Math.PI) d+=Math.PI*2; return d; }
   function loop(){
     const dt=Math.min(clock.getDelta(),.05), t=clock.elapsedTime;
-    const k=reduce?1:1-Math.exp(-dt*1.9);
+    if(!reduce){ surge*=Math.exp(-dt*2.4); spinKick*=Math.exp(-dt*1.6); }
+    const k=reduce?1:1-Math.exp(-dt*(1.35+surge*7));
     camPos.lerp(tPos,k); camLook.lerp(tLook,k);
-    camera.position.copy(camPos); if(!reduce){ camera.position.x+=mx*1.1; camera.position.y+=-my*.7; }
+    const arc=reduce?0:Math.sin(Math.min(1,surge)*Math.PI);
+    camera.position.copy(camPos);
+    if(!reduce){
+      orbitOff.copy(camera.position).sub(camLook);
+      const dist=Math.max(orbitOff.length(),.001);
+      spinQ.setFromAxisAngle(up, arc*(portrait?.85:1.15));
+      orbitOff.applyQuaternion(spinQ);
+      orbitOff.y+=Math.sin(arc*Math.PI)*dist*(portrait?.12:.22);
+      camera.position.copy(camLook).add(orbitOff);
+      camera.position.x+=mx*(portrait?.35:1.1); camera.position.y+=-my*(portrait?.2:.7);
+      camera.fov=fovBase+arc*(portrait?18:12); camera.updateProjectionMatrix();
+    }
     camera.lookAt(camLook);
+    if(!reduce) camera.rotateZ(Math.sin(surge*Math.PI)*(portrait?.4:.34));
 
     // globe focus
     let fk=userFocus || station.focus;
     if(fk==='session'){ fk = [...openNow][0] || 'london'; }
     if(fk){ const c = fk==='kuwait'? KUWAIT : CITIES[fk]; const ty=-c.lon*Math.PI/180; const tx=c.lat*Math.PI/180*.55;
-      globe.rotation.y+=angDiff(globe.rotation.y,ty)*(reduce?1:1-Math.exp(-dt*1.6)); globe.rotation.x+=(tx-globe.rotation.x)*(reduce?1:1-Math.exp(-dt*1.6)); }
-    else if(!reduce){ globe.rotation.y+=dt*.06; globe.rotation.x*=.99; }
-
-    const phonePortrait=innerWidth<900 && innerHeight>=innerWidth;
-    Object.values(markers).forEach(m=>{ m.lb.material.opacity=phonePortrait?0:1; });
-    if(kwLabel) kwLabel.material.opacity=phonePortrait?0:1;
+      globe.rotation.y+=angDiff(globe.rotation.y,ty)*(reduce?1:1-Math.exp(-dt*1.6)); globe.rotation.x+=(tx-globe.rotation.x)*(reduce?1:1-Math.exp(-dt*1.6));
+      if(!reduce) globe.rotation.y+=spinKick*dt;
+    }
+    else if(!reduce){ globe.rotation.y+=dt*(.06+spinKick); globe.rotation.x*=.99; }
+    globeTilt.rotation.z=0.18+(reduce?0:Math.sin(surge*Math.PI)*.85);
+    globeTilt.rotation.x=(reduce?0:Math.sin(surge*Math.PI*2)*.22);
+    const gMul=innerWidth<900?2.05:1;
     Object.entries(markers).forEach(([key,m])=>{
       const on=openNow.has(key); const sel=(userFocus||station.focus)===key || (station.focus==='session'&&on);
       const p=reduce?0:(t*.8+key.length*.13)%1;
       m.ring.scale.setScalar(1+(on?p*2.2:p*.8)); m.ring.material.opacity=(on?.95:.5)*(1-p);
       m.glow.material.opacity += ((sel?.95:on?.55:.0)-m.glow.material.opacity)*.08;
       m.core.material.color.setHex(on||sel?0xffffff:0xff7a86);
+      if(m.lb.userData.base){
+        const show=facing(m.lb);
+        m.lb.scale.copy(m.lb.userData.base).multiplyScalar(gMul*(sel?1.55:1));
+        m.lb.material.opacity += ((show?1:0)-m.lb.material.opacity)*.2;
+      }
     });
+    if(kwLabel&&kwLabel.userData.base){
+      const sel=(userFocus||station.focus)==='kuwait';
+      const show=facing(kwLabel);
+      kwLabel.scale.copy(kwLabel.userData.base).multiplyScalar(gMul*(sel?1.55:1));
+      kwLabel.material.opacity += ((show?1:0)-kwLabel.material.opacity)*.2;
+    }
+    if(!reduce){
+      const whip=Math.sin(Math.min(1,surge)*Math.PI);
+      chart.rotation.y=-0.22+whip*(station.pivot?.85:.18);
+      chart.rotation.x=whip*(station.pivot?.28:0);
+    }
     arcs.forEach(a=>{ const u=reduce?.5:(t*.22+a.off)%1; a.dot.position.copy(a.curve.getPoint(u)); a.dot.material.opacity=Math.sin(u*Math.PI); });
 
     // chart build
@@ -969,10 +1022,11 @@ function initStage(){
     if(pivotT>=0){ pivotT+=dt; sheets.forEach(s=>{ const e=reduce?1:ease((pivotT-1.1-s.i*.14)/.7); s.grp.scale.x=Math.max(.001,e); s.lb.material.opacity=e; }); }
     else { sheets.forEach(s=>{ s.grp.scale.x=Math.max(.001,s.grp.scale.x*.9); s.lb.material.opacity*=.9; }); }
 
-    if(!reduce){ stars.rotation.y=Math.sin(t*.03)*.04; }
-    const dimT = station.dim? .55 : 1; halo.material.opacity += ((station.center===G?.55:.1)*dimT - halo.material.opacity)*.05;
-    chartHalo.material.opacity += ((station.pivot?.24:.05) - chartHalo.material.opacity)*.05;
-    if(bloom){ bloom.strength += ((station.dim?.75:1.05)-bloom.strength)*.05; }
+    if(!reduce){ stars.rotation.y=Math.sin(t*.03)*.04+surge*1.6; stars.rotation.z=Math.sin(surge*Math.PI)*.4; }
+    halo.scale.setScalar(R*3.4*(1+(reduce?0:Math.sin(Math.min(1,surge)*Math.PI))*.55));
+    const dimT = station.dim? .55 : 1; halo.material.opacity += (((station.center===G?.55:.1)*dimT+surge*.55) - halo.material.opacity)*.08;
+    chartHalo.material.opacity += ((station.pivot?.24:.05) + (station.pivot?surge*.2:0) - chartHalo.material.opacity)*.08;
+    if(bloom){ bloom.strength += (((station.dim?.75:1.05)+surge*1.7)-bloom.strength)*.08; }
     if(composer) composer.render(); else renderer.render(scene,camera);
     requestAnimationFrame(loop);
   }
